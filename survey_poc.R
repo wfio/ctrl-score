@@ -12,13 +12,13 @@
 require(dplyr)
 require(readxl)
 require(reshape2)
+require(tidyr)
+require(tibble)
 
 # Establish the file names to read and read the contents of the Excel files into
 # a list of data.frames
-files.list <-
-  list.files(pattern = '*.xlsx')  # Get a list of file names in the directory
-df.files <-
-  setNames(lapply(files.list, read_excel), files.list)  # Read the contents of those files into a list of data.frames
+files.list <-list.files(pattern = '*.xlsx')  # Get a list of file names in the directory
+df.files <-setNames(lapply(files.list, read_excel), files.list)  # Read the contents of those files into a list of data.frames
 df <- bind_rows(df.files, .id = "file_src")
 
 # Tidy up yo-self! And don't leave no trash!
@@ -26,92 +26,153 @@ df <- bind_rows(df.files, .id = "file_src")
 
 # Create summary statistics data.frames at the assessment and business unit
 # levels across the control categories BSA Admin assessment unit scores
-df %>%
+bsa.au.stat.wide <- df %>%
   group_by(AU, CC) %>%
   filter(AU == "BSA Admin") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
-  dcast(AU ~ CC, value.var = "avg") %>%
-  print() -> bsa.au.stat.wide  # end chain
+  dcast(AU ~ CC, value.var = "avg") %>% 
+  print()  # end chain
+
 # Creates the summary statistics of the BSA Admin business units by Control Category
-df %>%
+bsa.bu.stat.wide <- df %>%
   group_by(BU, CC) %>%
   filter(AU == "BSA Admin") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(BU ~ CC, value.var = "avg") %>%
-  print() -> bsa.bu.stat.wide  # end chain
+  print()  # end chain
 
 # BSG assessment unit scores
-df %>%
+bsg.au.stat.wide <- df %>%
   group_by(AU, CC) %>%
   filter(AU == "BSG") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(AU ~ CC, value.var = "avg") %>%
-  print() -> bsg.au.stat.wide  # end chain
+  print()  # end chain
 # Creates the summary statistics of the BSG business units by Control Category
-df %>%
+bsg.bu.stat.wide <- df %>%
   group_by(BU, CC) %>%
   filter(AU == "BSG") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(BU ~ CC, value.var = "avg") %>%
-  print() -> bsg.bu.stat.wide  # end chain
+  print()  # end chain
 
 # CBD Assessment Unit scores
-df %>%
+cbd.au.stat.wide <- df %>%
   group_by(AU, CC) %>%
   filter(AU == "CBD") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(AU ~ CC, value.var = "avg") %>%
-  print() -> cbd.au.stat.wide  # end chain
+  print()  # end chain
 # CBD business units by Control Category
-df %>%
+cbd.bu.stat.wide <- df %>%
   group_by(BU, CC) %>%
   filter(AU == "CBD") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(BU ~ CC, value.var = "avg") %>%
-  print() -> cbd.bu.stat.wide  # end chain
+  print() # end chain
 
 # CBG assessment unit scores
-df %>%
+cbg.au.stat.wide <- df %>%
   group_by(AU, CC) %>%
   filter(AU == "CBG") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(AU ~ CC, value.var = "avg") %>%
-  print() -> cbg.au.stat.wide  # end chain
+  print()  # end chain
 # CBG business units by Control Category
-df %>%
+cbg.bu.stat.wide <- df %>%
   group_by(BU, CC) %>%
   filter(AU == "CBG") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(BU ~ CC, value.var = "avg") %>%
-  print() -> cbg.bu.stat.wide  # end chain
+  print() # end chain
 
 # WMG assessment unit scores
-df %>%
+wmg.au.stat.wide <- df %>%
   group_by(AU, CC) %>%
   filter(AU == "WMG") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(AU ~ CC, value.var = "avg") %>%
-  print() -> wmg.au.stat.wide  # end chain
+  print() # end chain
 # Creates the summary statistics of the WMG business units by Control Category
-df %>%
+wmg.bu.stat.wide <- df %>%
   group_by(BU, CC) %>%
   filter(AU == "WMG") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(BU ~ CC, value.var = "avg") %>%
-  print() -> wmg.bu.stat.wide  # end chain
+  print() # end chain, 
 
+#bind all of the rows for all assessment units together
+au.scores <- bind_rows(
+  bsa.au.stat.wide,bsg.au.stat.wide,cbd.au.stat.wide,
+  cbg.au.stat.wide,wmg.au.stat.wide)
 
-cbd.overall <- data.frame(
-  cbd.gov = (au.scores[3, 4] * .30) * .33 + (au.scores[1, 4] * .30) * .33 +
-    (au.scores[2, 4] * .30) * .33,
-  cbd.corc = (au.scores[3, 3] * .30) * .33 + (au.scores[1, 3] * .1) * .33 +
-    (au.scores[2, 3] * .1) * .33,
-  cbd.tmsc = (au.scores[3, 6] * .30) * .33 + (au.scores[1, 6] * .30) * .33 +
-    (au.scores[2, 6] * .30) * .33,
-  cbd.audit = (au.scores[3, 2] * .30) * .33 + (au.scores[1, 2] * .30) * .33 +
-    (au.scores[2, 2] * .30) * .33,
-  cbd.pps = (au.scores[3, 5] * .30) * .33 + (au.scores[1, 5] * .30) * .33 +
-    (au.scores[2, 5] * .30) * .33,
-  cbd.train = (au.scores[3, 7] * .30) * .33 + (au.scores[1, 7] * .30) * .33 +
-    (au.scores[2, 7] * .30) * .33
+# Create table of control category weights
+weight.table <- tribble(
+  ~AU, ~AUDIT, ~CORC, ~GOV, ~PPS, ~TMSC, ~TRAIN,
+  "BSA Admin",.10,.10,.30,.10,.30,.10,
+  "BSG",.10,.10,.30,.10,.30,.10,
+  "CBD",.10,.30,.30,.10,.10,.10,
+  "CBG",.10,.30,.30,.10,.10,.10,
+  "WMG",.10,.30,.30,.10,.10,.10
 )
+
+# arrange columns in au.scores to match order of columns in weight.table and
+# re-name au.scores to lob scores
+lob.scores <- au.scores %>% arrange(AU, GOV, CORC, TMSC, AUDIT, PPS, TRAIN)
+
+# calculate weighted scores for the lines of business
+lob.weighted.scores <- lob.scores[,-1]*weight.table[,-1]
+lob.weighted.scores$AU <- lob.scores$AU
+
+# calculate scores for each line of business
+lob.weighted.scores <- lob.weighted.scores %>%
+  gather(Control_Category, weighted.score, -AU) %>%
+  group_by(Control_Category) %>%
+  summarise(CBD = round(weighted.mean(weighted.score, c(1,1,1,0,0)),2),
+            CBG = round(weighted.mean(weighted.score, c(1,1,0,1,0)),2),
+            WMG = round(weighted.mean(weighted.score, c(1,1,0,0,1)),2)) %>%
+  ungroup()
+
+# rearrange result & calculate overall sum for each line of business
+lob.control.scores <- lob.weighted.scores %>%
+  gather(LOB, score, -Control_Category) %>%
+  spread(Control_Category, score) %>%
+  select(LOB, GOV, CORC, TMSC, AUDIT, PPS, TRAIN) %>%
+  mutate(Control_Score = GOV + CORC + TMSC + AUDIT + PPS + TRAIN) %>%
+  mutate(Control_Rating = case_when(
+    Control_Score > 3.499 ~ "Ineffective",
+    Control_Score > 2.499 & Control_Score <= 3.499 ~ "Marginally Effective",
+    Control_Score >= 1.5 & Control_Score <= 2.499 ~ "Generally Effective",
+    Control_Score < 1.5 ~ "Highly Effective"
+  )
+)# end-chain
+
+################
+# populate df of au.scores by the name bsa.bsg.scores
+bsa.bsg.scores <- au.scores %>% arrange(AU, GOV, CORC, TMSC, AUDIT, PPS, TRAIN)
+
+# calculate weighted scores for BSA Admin and BSG
+bsa.bsg.weighted.scores <- au.scores[,-1]*weight.table[,-1]
+bsa.bsg.weighted.scores$AU <- au.scores$AU
+
+# calculate scores for BSA Admin and BSG
+bsa.bsg.weighted.scores <- bsa.bsg.weighted.scores %>%
+  gather(Control_Category, weighted.score, -AU) %>%
+  group_by(Control_Category) %>%
+  summarise(BSA_Admin = weighted.mean(weighted.score, c(1,0,0,0,0)),
+            BSG = weighted.mean(weighted.score, c(0,1,0,0,0))) %>%
+  ungroup()
+
+# rearrange result & calculate overall sum for BSA Admin and BSG
+bsa.bsg.control.scores <- bsa.bsg.weighted.scores %>%
+  gather(group, score, -Control_Category) %>%
+  spread(Control_Category, score) %>%
+  select(group, GOV, CORC, TMSC, AUDIT, PPS, TRAIN) %>%
+  mutate(Control_Score = GOV + CORC + TMSC + AUDIT + PPS + TRAIN) %>%
+  mutate(Rating = case_when(
+    Control_Score > 3.499 ~ "Ineffective",
+    Control_Score > 2.499 & Control_Score <= 3.499 ~ "Marginally Effective",
+    Control_Score >= 1.5 & Control_Score <= 2.499 ~ "Generally Effective",
+    Control_Score < 1.5 ~ "Highly Effective"
+  )
+         )
