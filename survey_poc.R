@@ -5,7 +5,7 @@
 # underlying original worksheets are modified at a later date. Now, the
 # underlying workbooks can continue to be modified and the script just needs to
 # be run once after all modifications are completed. The script performs various
-# grouping actions and then summarizes the raw scores by producing simple
+# grouping actions and then summarizes the raw scores by producing sinstallimple
 # averages and the corresponding ratings.
 
 #load packages
@@ -101,7 +101,7 @@ wmg.bu.stat.wide <- df %>%
   dcast(BU ~ CC, value.var = "avg") %>%
   print() # end chain, 
 
-#bind all of the rows for all assessment units together
+#bind all of the rows for all assessment units together for summary stats
 au.scores <- bind_rows(
   bsa.au.stat.wide,bsg.au.stat.wide,cbd.au.stat.wide,
   cbg.au.stat.wide,wmg.au.stat.wide)
@@ -115,6 +115,19 @@ weight.table <- tribble(
   "CBG",.10,.30,.30,.10,.10,.10,
   "WMG",.10,.30,.30,.10,.10,.10
 )
+
+# prepare a table of enterprise level ratings
+score_label <- function(score){
+  lbl <- case_when(
+    score > 0 & score < 1.5 ~ "Highly Effective",
+    score >= 1.5 & score < 2.5 ~ "Generally Effective",
+    score >= 2.5 & score < 3.5 ~ "Marginally Effective",
+    score >= 3.5 ~ "Ineffective"
+  )
+  return(lbl)
+} 
+df_out <- data.frame(apply(au.scores[,2:ncol(au.scores)],2,score_label))
+df_out <- cbind(au.scores[,1], df_out)
 
 # arrange columns in au.scores to match order of columns in weight.table and
 # re-name au.scores to lob scores
