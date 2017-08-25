@@ -126,8 +126,10 @@ score_label <- function(score){
   )
   return(lbl)
 } 
-df_out <- data.frame(apply(au.scores[,2:ncol(au.scores)],2,score_label))
-df_out <- cbind(au.scores[,1], df_out)
+
+df_out <- au.scores %>% 
+  mutate_at(c("AUDIT", "CORC", "GOV", "PPS", "TMSC", "TRAIN"), score_label)
+df_out[,1:4]
 
 # arrange columns in au.scores to match order of columns in weight.table and
 # re-name au.scores to lob scores
