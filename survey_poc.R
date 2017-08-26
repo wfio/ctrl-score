@@ -1,19 +1,20 @@
-# This script automates the processing of the control inventory survey
-# workbooks. It eliminates moving all of the spreadsheets into a directory by
-# manually copying and pasting all of the content into a semi-static worksheet.
-# The semi-static worksheet approach is subject to errors or ommissions if the
-# underlying original worksheets are modified at a later date. Now, the
-# underlying workbooks can continue to be modified and the script just needs to
-# be run once after all modifications are completed. The script performs various
-# grouping actions and then summarizes the raw scores by producing sinstallimple
-# averages and the corresponding ratings.
+# Author: Zach                                                                 #
+# Description of Script Purpose:                                               #
+# This script automates the processing of tidy data in Excel workbooks. It eli-#
+# minates moving all of the spreadsheets into a directory by manually copying  #
+# and pasting all of the content into a semi-static worksheet. The semi-static #
+# worksheet approach is subject to errors or ommissions if the underlying orig-#
+# inal worksheets are modified at a later date. As a result, the underlying wo-#
+# rkbooks can continue to be modified and the script just needs to be run once #
+# after all modifications are completed. The script performs various grouping  #
+# actions and then summarizes the raw scores by producing simple averages and  #
+# the corresponding ratings.                                                   #
+################################################################################
 
 #load packages
-require(dplyr)
-require(readxl)
-require(reshape2)
-require(tidyr)
-require(tibble)
+require(tidyverse) #contains dplyr, tidyr, tibbles and other nifty things
+require(readxl) #fast XSLX parser
+require(reshape2) #reshapes long dfs into wide dfs via dcast
 
 # Establish the file names to read and read the contents of the Excel files into
 # a list of data.frames
@@ -24,13 +25,38 @@ df <- bind_rows(df.files, .id = "file_src")
 # Tidy up yo-self! And don't leave no trash!
 #rm(df.files, files.list)
 
-# Create summary statistics data.frames at the assessment and business unit
-# levels across the control categories BSA Admin assessment unit scores
-bsa.au.stat.wide <- df %>%
-  group_by(AU, CC) %>%
+# Begin Assessment Unit and Business Unit Summary Statistics ###################
+# Stage 2 processing                                                           #
+# Create summary statistics (simple average) data.frames at the assessment and #
+# business unit levels across the control categories. This section of the      #
+# script takes the data.frame and collapses the data at the levels of AU and   #
+# CC. This allows for simple summary statistics via (dplyr::summarise) to      #
+# operate on each vector of the data.frame. Thus, each CC of a given AU or BU  #
+# is the simple mathetmatical average of the raw scores from the vector of     #
+# corresponding scores for the given category (GOV, CORC, etc scores [0-4])    #
+# where 0 = N/A, 1 = "Highly Effective", 2 = "Generally Effective",            #
+# 3 = "Marginally Effective" and # 4 = "Ineffective". These scores and ratings #
+# are established and defined in the methodology.                              #
+################################################################################
+
+# Assessment unit scores (decide spread spread and dcast)
+# The script groups the raw data by group AU (rownames) and CC (colnames). Once
+# grouped, it filters out rownames == 'AU_name' then derives the simple avg
+# for each CC for each AU. The data is then pivoted from long to wide form and 
+# stored as a tibble or data.frame 'au_name.au.stat.wide'.
+
+bsa.au.stat.wide <- df %>% # 
+  group_by(AU, CC) %>% # groups df by AU and CC
   filter(AU == "BSA Admin") %>%
   summarise(avg = mean(Score, na.rm = TRUE)) %>%
   dcast(AU ~ CC, value.var = "avg") %>% 
+  print()  # end chain
+
+bsa.au.stat.spread <- df %>% # 
+  group_by(AU, CC) %>% # groups df by AU and CC
+  filter(AU == "BSA Admin") %>%
+  summarise(avg = mean(Score, na.rm = TRUE)) %>%
+  spread(key = CC, value = avg) %>% 
   print()  # end chain
 
 # Creates the summary statistics of the BSA Admin business units by Control Category
@@ -101,10 +127,17 @@ wmg.bu.stat.wide <- df %>%
   dcast(BU ~ CC, value.var = "avg") %>%
   print() # end chain, 
 
-#bind all of the rows for all assessment units together for summary stats
-au.scores <- bind_rows(
+# Bind all of the rows together as a wide and tidy data frame of averages 
+# across the given control category of a given assessment or business unit.
+# assessment unit level
+au.avg.scores <- bind_rows(
   bsa.au.stat.wide,bsg.au.stat.wide,cbd.au.stat.wide,
-  cbg.au.stat.wide,wmg.au.stat.wide)
+  cbg.au.stat.wide, wmg.au.stat.wide)
+# business unit level
+bu.avg.scores <- bind_rows(bsa.bu.stat.wide, bsg.bu.stat.wide, cbd.bu.stat.wide,
+                           cbg.bu.stat.wide, wmg.bu.stat.wide)
+
+# End Stage 2 Processing #######################################################
 
 # Create table of control category weights
 weight.table <- tribble(
@@ -116,8 +149,15 @@ weight.table <- tribble(
   "WMG",.10,.30,.30,.10,.10,.10
 )
 
-# prepare a table of enterprise level ratings
-score_label <- function(score){
+derive_ratings <- function(score) {
+  # Creates a reference data.frame of score ranges to string values
+  #
+  # Args: 
+  #  score: The simple average from a data.frame of scores
+  #
+  # Returns:
+  #  A string value that corresponds to a given score in the range.
+  #  e.g., 2.45 would return "Generally Effective"
   lbl <- case_when(
     score > 0 & score < 1.5 ~ "Highly Effective",
     score >= 1.5 & score < 2.5 ~ "Generally Effective",
@@ -125,22 +165,26 @@ score_label <- function(score){
     score >= 3.5 ~ "Ineffective"
   )
   return(lbl)
-} 
+} #end-rating
 
-df_out <- au.scores %>% 
+au.ratings.cc <- au.avg.scores %>% 
   mutate_at(c("AUDIT", "CORC", "GOV", "PPS", "TMSC", "TRAIN"), score_label)
-df_out[,1:4]
+au.ratings.cc[,1:4]
+
+bu.ratings.cc <- bu.avg.scores %>%
+  mutate_at(c("AUDIT", "CORC", "GOV", "PPS", "TMSC", "TRAIN"), score_label)
+bu.ratings.cc[,1:4]
 
 # arrange columns in au.scores to match order of columns in weight.table and
 # re-name au.scores to lob scores
-lob.scores <- au.scores %>% arrange(AU, GOV, CORC, TMSC, AUDIT, PPS, TRAIN)
+lob.avg.scores <- au.avg.scores %>% arrange(AU, GOV, CORC, TMSC, AUDIT, PPS, TRAIN)
 
 # calculate weighted scores for the lines of business
-lob.weighted.scores <- lob.scores[,-1]*weight.table[,-1]
-lob.weighted.scores$AU <- lob.scores$AU
+lob.weighted.avg.scores <- lob.avg.scores[,-1]*weight.table[,-1]
+lob.weighted.avg.scores$AU <- lob.avg.scores$AU
 
-# calculate scores for each line of business
-lob.weighted.scores <- lob.weighted.scores %>%
+# calculate weighted average scores for each line of business (CBD, CBG, WMG)
+lob.weighted.avg.scores <- lob.weighted.avg.scores %>%
   gather(Control_Category, weighted.score, -AU) %>%
   group_by(Control_Category) %>%
   summarise(CBD = round(weighted.mean(weighted.score, c(1,1,1,0,0)),2),
