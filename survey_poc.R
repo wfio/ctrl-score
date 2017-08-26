@@ -136,7 +136,7 @@ au.avg.scores <- bind_rows(
 # business unit level
 bu.avg.scores <- bind_rows(bsa.bu.stat.wide, bsg.bu.stat.wide, cbd.bu.stat.wide,
                            cbg.bu.stat.wide, wmg.bu.stat.wide)
-
+#
 # End Stage 2 Processing #######################################################
 
 # Create table of control category weights
