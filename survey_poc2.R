@@ -42,17 +42,15 @@ df <- bind_rows(df.files, .id = "file_src")
 # and each assessment unit across the respective control categories.
 scores.list <- list(AU = df %>%
                   group_by(AU, CC) %>% # groups df by AU and CC
-                  summarise(avg = mean(Score, na.rm = TRUE)) %>%
-                    spread(AU, CC, avg),
+                  summarise(avg = mean(Score, na.rm = TRUE)),
                 
-                BU = df %>% # 
-                  group_by(BU, CC) %>% # groups df by AU and CC
-                  summarise(avg = mean(Score, na.rm = TRUE)) %>%
-                    spread(BU, CC, avg))
+                  BU = df %>% # 
+                  group_by(BU, CC) %>% # groups df by BU and CC
+                  summarise(avg = mean(Score, na.rm = TRUE))) #end-list
 
-df.table <- bind_rows(scores.list, .id = "Unit Level") %>% 
+df.table <- bind_rows(scores.list, .id = "Unit_Level") %>% 
   replace(., is.na(.), "") %>%  # To avoid "NA" values when we "unite" below
-  unite(Unit, AU, BU, sep="") %>% 
+  unite(Unit_Name, AU, BU, sep="") %>% 
   spread(CC, avg)
 df.table
 #
@@ -61,7 +59,7 @@ df.table
 # Create table of control category weights
 weight.table <- tribble(
   ~AU, ~AUDIT, ~CORC, ~GOV, ~PPS, ~TMSC, ~TRAIN,
-  "BSA Admin",.10,.10,.30,.10,.30,.10,
+  "BSA_Admin",.10,.10,.30,.10,.30,.10,
   "BSG",.10,.10,.30,.10,.30,.10,
   "CBD",.10,.30,.30,.10,.10,.10,
   "CBG",.10,.30,.30,.10,.10,.10,
@@ -77,66 +75,61 @@ convert_scores <- function(score) {
   # Returns:
   #  A string value that corresponds to a given score in the range.
   #  e.g., 2.45 would return "Generally Effective"
-  lbl <- case_when(
+  rating <- case_when(
     score > 0 & score < 1.5 ~ "Highly Effective",
     score >= 1.5 & score < 2.5 ~ "Generally Effective",
     score >= 2.5 & score < 3.5 ~ "Marginally Effective",
     score >= 3.5 ~ "Ineffective"
   )
-  return(lbl)
-} #end-rating
+  return(rating)
+} #end-function(convert_scores)
 
 # Create tables of Control Ratings using the covert_scores function to translate
-# the simple average to a Control rating. Creates AU and BU level tables.
+# the simple average to a Control rating. Creates AU and BU level tables. Paste
+# these back into Excel and conditionally color to give a heat map. At least,
+# until I figure out a way to conditionally color within R.
 
 au.ratings.tbl <- df.table %>%
-  filter(`Unit Level` == "AU") %>%
+  filter(Unit_Level == "AU") %>%
   mutate_at(c("AUDIT", "CORC", "GOV", "PPS", "TMSC", "TRAIN"), convert_scores)
   au.ratings.tbl[,1:8]
 
 bu.ratings.tbl <- df.table %>%
-  filter(`Unit Level` == "BU") %>%
+  filter(Unit_Level == "BU") %>%
   mutate_at(c("AUDIT", "CORC", "GOV", "PPS", "TMSC", "TRAIN"), convert_scores)
 bu.ratings.tbl[,1:8]
 
-# arrange columns in au.scores to match order of columns in weight.table and
-# re-name au.scores to lob scores
-#lob.avg.scores <- au.avg.scores %>% arrange(AU, GOV, CORC, TMSC, AUDIT, PPS, TRAIN)
-
 # calculate weighted scores for the lines of business
-au.names <- c("BSA Admin", "BSG", "CBD", "CBG", "WMG")
+au.names <- c("BSA_Admin", "BSG", "CBD", "CBG", "WMG")
 au.weighted.scores <- spread(scores.list$AU, CC, avg)[,-1]*weight.table[,-1]
-rownames(au.weighted.scores) <- au.names
+au.weighted.scores <- cbind(AU = paste0(au.names), au.weighted.scores)
 
-# calculate weighted average scores for each line of business (CBD, CBG, WMG)
-au.weighted.scores <- au.weighted.scores %>%
-  gather(Control_Category, weighted.score) %>%
+lob.weighted.scores <- au.weighted.scores %>%
+  gather(Control_Category, weighted.score, -AU) %>%
   group_by(Control_Category) %>%
   summarise(CBD = round(weighted.mean(weighted.score, c(1,1,1,0,0)),2),
             CBG = round(weighted.mean(weighted.score, c(1,1,0,1,0)),2),
             WMG = round(weighted.mean(weighted.score, c(1,1,0,0,1)),2)) %>%
   ungroup()
+lob.weighted.scores
 
 # rearrange result & calculate overall sum for each line of business
-lob.control.scores <- lob.weighted.scores %>%
+lob.control.results <- lob.weighted.scores %>%
   gather(LOB, score, -Control_Category) %>%
   spread(Control_Category, score) %>%
   select(LOB, GOV, CORC, TMSC, AUDIT, PPS, TRAIN) %>%
-  mutate(Control_Score = GOV + CORC + TMSC + AUDIT + PPS + TRAIN) %>%
+  mutate(Control_Score = AUDIT + CORC + GOV + PPS + TMSC + TRAIN) %>%
   mutate(Control_Rating = case_when(
     Control_Score > 3.499 ~ "Ineffective",
     Control_Score > 2.499 & Control_Score <= 3.499 ~ "Marginally Effective",
     Control_Score >= 1.5 & Control_Score <= 2.499 ~ "Generally Effective",
     Control_Score < 1.5 ~ "Highly Effective"
   )
-  )# end-chain
-
-################
-# populate df of au.scores by the name bsa.bsg.scores
-bsa.bsg.scores <- au.scores %>% arrange(AU, GOV, CORC, TMSC, AUDIT, PPS, TRAIN)
+)# end-chain
+lob.control.results
 
 # calculate weighted scores for BSA Admin and BSG
-bsa.bsg.weighted.scores <- au.scores[,-1]*weight.table[,-1]
+central.control.scores <- au.weighted.scores[,-1]*weight.table[,-1]
 bsa.bsg.weighted.scores$AU <- au.scores$AU
 
 # calculate scores for BSA Admin and BSG
